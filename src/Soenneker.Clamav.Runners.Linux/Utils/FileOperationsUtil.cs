@@ -59,6 +59,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
             throw new FileNotFoundException("The ClamAV package did not contain freshclam.", freshclamPath);
 
         RemoveDevelopmentFiles(stageDirectory);
+        MaterializeSymbolicLinks(stageDirectory);
 
         await _fileUtil.Write(Path.Combine(stageDirectory, "SOURCE.txt"),
             $"Official release package from https://github.com/{Owner}/{Repository}/releases/latest{Environment.NewLine}Asset: {Path.GetFileName(asset)}{Environment.NewLine}",
@@ -81,10 +82,27 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
                 Directory.Delete(directory, recursive: true);
         }
 
-        foreach (string pattern in new[] {"*.a", "*.la"})
+        foreach (string pattern in new[] { "*.a", "*.la" })
         {
             foreach (string file in Directory.EnumerateFiles(stageDirectory, pattern, SearchOption.AllDirectories))
                 File.Delete(file);
+        }
+    }
+
+    private static void MaterializeSymbolicLinks(string stageDirectory)
+    {
+        foreach (string path in Directory.EnumerateFiles(stageDirectory, "*", SearchOption.AllDirectories))
+        {
+            var file = new FileInfo(path);
+            if (file.LinkTarget is null)
+                continue;
+
+            FileSystemInfo? target = file.ResolveLinkTarget(returnFinalTarget: true);
+            if (target is not FileInfo targetFile)
+                throw new IOException($"Could not resolve symbolic link '{path}'.");
+
+            file.Delete();
+            targetFile.CopyTo(path);
         }
     }
 

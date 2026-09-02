@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -47,7 +48,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         await _processUtil.Start("dpkg-deb", extractDirectory,
             $"--extract {Quote(asset)} {Quote(extractDirectory)}", log: false, cancellationToken: cancellationToken);
 
-        string[] scanners = Directory.GetFiles(extractDirectory, "clamscan", SearchOption.AllDirectories);
+        string[] files = await _fileUtil.GetAllFileNamesInDirectoryRecursively(extractDirectory, log: false, cancellationToken);
+        string[] scanners = files.Where(static file => Path.GetFileName(file).Equals("clamscan", StringComparison.Ordinal)).ToArray();
         if (scanners.Length != 1)
             throw new FileNotFoundException("The ClamAV package did not contain exactly one clamscan executable.");
 
@@ -58,8 +60,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         if (!await _fileUtil.Exists(freshclamPath, cancellationToken))
             throw new FileNotFoundException("The ClamAV package did not contain freshclam.", freshclamPath);
 
-        RemoveDevelopmentFiles(stageDirectory);
-        MaterializeSymbolicLinks(stageDirectory);
+        await RemoveDevelopmentFiles(stageDirectory, cancellationToken);
+        await MaterializeSymbolicLinks(stageDirectory, cancellationToken);
 
         await _fileUtil.Write(Path.Combine(stageDirectory, "SOURCE.txt"),
             $"Official release package from https://github.com/{Owner}/{Repository}/releases/latest{Environment.NewLine}" +
@@ -71,8 +73,10 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         return stageDirectory;
     }
 
-    private static void RemoveDevelopmentFiles(string stageDirectory)
+    private async ValueTask RemoveDevelopmentFiles(string stageDirectory, CancellationToken cancellationToken)
     {
+        string[] files = await _fileUtil.GetAllFileNamesInDirectoryRecursively(stageDirectory, log: false, cancellationToken);
+
         foreach (string directory in new[]
                  {
                      Path.Combine(stageDirectory, "include"),
@@ -80,18 +84,18 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
                      Path.Combine(stageDirectory, "lib", "pkgconfig")
                  })
         {
-            if (Directory.Exists(directory))
-                Directory.Delete(directory, recursive: true);
+            await _directoryUtil.DeleteIfExists(directory, cancellationToken);
         }
 
-        foreach (string pattern in new[] { "*.a", "*.la" })
+        foreach (string file in files)
         {
-            foreach (string file in Directory.EnumerateFiles(stageDirectory, pattern, SearchOption.AllDirectories))
-                File.Delete(file);
+            string extension = Path.GetExtension(file);
+            if (extension.Equals(".a", StringComparison.Ordinal) || extension.Equals(".la", StringComparison.Ordinal))
+                await _fileUtil.Delete(file, log: false, cancellationToken: cancellationToken);
         }
     }
 
-    private static void MaterializeSymbolicLinks(string stageDirectory)
+    private async ValueTask MaterializeSymbolicLinks(string stageDirectory, CancellationToken cancellationToken)
     {
         foreach (string path in Directory.EnumerateFiles(stageDirectory, "*", SearchOption.AllDirectories))
         {
@@ -103,8 +107,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
             if (target is not FileInfo targetFile)
                 throw new IOException($"Could not resolve symbolic link '{path}'.");
 
-            file.Delete();
-            targetFile.CopyTo(path);
+            await _fileUtil.Delete(path, ignoreMissing: false, log: false, cancellationToken);
+            await _fileUtil.Copy(targetFile.FullName, path, log: false, cancellationToken);
         }
     }
 

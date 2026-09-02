@@ -6,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Soenneker.Clamav.Runners.Linux.Utils.Abstract;
+using Soenneker.Extensions.Task;
+using Soenneker.Extensions.ValueTask;
 using Soenneker.GitHub.Repositories.Releases.Abstract;
 using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.File.Abstract;
@@ -37,18 +39,18 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
     public async ValueTask<string> Process(CancellationToken cancellationToken = default)
     {
-        string downloadDirectory = await _directoryUtil.CreateTempDirectory(cancellationToken);
+        string downloadDirectory = await _directoryUtil.CreateTempDirectory(cancellationToken).NoSync();
         string? asset = await _releasesUtil.DownloadReleaseAssetByNamePattern(Owner, Repository, downloadDirectory,
-            _assetPatterns, cancellationToken);
+            _assetPatterns, cancellationToken).NoSync();
 
         if (asset is null)
             throw new FileNotFoundException("Could not find the Linux x64 Debian package in the latest stable ClamAV release.");
 
-        string extractDirectory = await _directoryUtil.CreateTempDirectory(cancellationToken);
+        string extractDirectory = await _directoryUtil.CreateTempDirectory(cancellationToken).NoSync();
         await _processUtil.Start("dpkg-deb", extractDirectory,
-            $"--extract {Quote(asset)} {Quote(extractDirectory)}", log: false, cancellationToken: cancellationToken);
+            $"--extract {Quote(asset)} {Quote(extractDirectory)}", log: false, cancellationToken: cancellationToken).NoSync();
 
-        string[] files = await _fileUtil.GetAllFileNamesInDirectoryRecursively(extractDirectory, log: false, cancellationToken);
+        string[] files = await _fileUtil.GetAllFileNamesInDirectoryRecursively(extractDirectory, log: false, cancellationToken).NoSync();
         string[] scanners = files.Where(static file => Path.GetFileName(file).Equals("clamscan", StringComparison.Ordinal)).ToArray();
         if (scanners.Length != 1)
             throw new FileNotFoundException("The ClamAV package did not contain exactly one clamscan executable.");
@@ -57,17 +59,17 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         string stageDirectory = Directory.GetParent(binDirectory)!.FullName;
 
         string freshclamPath = Path.Combine(binDirectory, "freshclam");
-        if (!await _fileUtil.Exists(freshclamPath, cancellationToken))
+        if (!await _fileUtil.Exists(freshclamPath, cancellationToken).NoSync())
             throw new FileNotFoundException("The ClamAV package did not contain freshclam.", freshclamPath);
 
-        await RemoveDevelopmentFiles(stageDirectory, cancellationToken);
-        await MaterializeSymbolicLinks(stageDirectory, cancellationToken);
+        await RemoveDevelopmentFiles(stageDirectory, cancellationToken).NoSync();
+        await MaterializeSymbolicLinks(stageDirectory, cancellationToken).NoSync();
 
         await _fileUtil.Write(Path.Combine(stageDirectory, "SOURCE.txt"),
             $"Official release package from https://github.com/{Owner}/{Repository}/releases/latest{Environment.NewLine}" +
             $"Asset: {Path.GetFileName(asset)}{Environment.NewLine}" +
             $"Symbolic links are materialized for NuGet compatibility.{Environment.NewLine}",
-            log: false, cancellationToken);
+            log: false, cancellationToken).NoSync();
 
         _logger.LogInformation("Prepared Linux x64 ClamAV runtime at {StageDirectory}", stageDirectory);
         return stageDirectory;
@@ -75,7 +77,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
     private async ValueTask RemoveDevelopmentFiles(string stageDirectory, CancellationToken cancellationToken)
     {
-        string[] files = await _fileUtil.GetAllFileNamesInDirectoryRecursively(stageDirectory, log: false, cancellationToken);
+        string[] files = await _fileUtil.GetAllFileNamesInDirectoryRecursively(stageDirectory, log: false, cancellationToken).NoSync();
 
         foreach (string directory in new[]
                  {
@@ -84,14 +86,14 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
                      Path.Combine(stageDirectory, "lib", "pkgconfig")
                  })
         {
-            await _directoryUtil.DeleteIfExists(directory, cancellationToken);
+            await _directoryUtil.DeleteIfExists(directory, cancellationToken).NoSync();
         }
 
         foreach (string file in files)
         {
             string extension = Path.GetExtension(file);
             if (extension.Equals(".a", StringComparison.Ordinal) || extension.Equals(".la", StringComparison.Ordinal))
-                await _fileUtil.Delete(file, log: false, cancellationToken: cancellationToken);
+                await _fileUtil.Delete(file, log: false, cancellationToken: cancellationToken).NoSync();
         }
     }
 
@@ -107,8 +109,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
             if (target is not FileInfo targetFile)
                 throw new IOException($"Could not resolve symbolic link '{path}'.");
 
-            await _fileUtil.Delete(path, ignoreMissing: false, log: false, cancellationToken);
-            await _fileUtil.Copy(targetFile.FullName, path, log: false, cancellationToken);
+            await _fileUtil.Delete(path, ignoreMissing: false, log: false, cancellationToken).NoSync();
+            await _fileUtil.Copy(targetFile.FullName, path, log: false, cancellationToken).NoSync();
         }
     }
 

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using Soenneker.Enums.DeployEnvironment;
 using Soenneker.Extensions.LoggerConfiguration;
+using Soenneker.Extensions.Task;
 using Soenneker.Extensions.ValueTask;
 
 namespace Soenneker.Clamav.Runners.Linux;
@@ -29,7 +30,7 @@ public sealed class Program
 
         try
         {
-            await CreateHostBuilder(args).RunConsoleAsync(_cts.Token);
+            await CreateHostBuilder(args).RunConsoleAsync(_cts.Token).NoSync();
         }
         catch (Exception e)
         {

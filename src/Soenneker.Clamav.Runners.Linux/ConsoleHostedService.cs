@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Soenneker.Clamav.Runners.Linux.Utils.Abstract;
+using Soenneker.Extensions.ValueTask;
 using Soenneker.Managers.Runners.Abstract;
 
 namespace Soenneker.Clamav.Runners.Linux;
@@ -33,9 +34,9 @@ public sealed class ConsoleHostedService : IHostedService
         {
             try
             {
-                string stageDirectory = await _fileOperationsUtil.Process(cancellationToken);
+                string stageDirectory = await _fileOperationsUtil.Process(cancellationToken).NoSync();
                 await _runnersManager.PushIfChangesNeededForDirectory(Path.Combine(Constants.RuntimeIdentifier, "clamav"), stageDirectory,
-                    Constants.Library, $"https://github.com/soenneker/{Constants.Library}", false, cancellationToken);
+                    Constants.Library, $"https://github.com/soenneker/{Constants.Library}", false, cancellationToken).NoSync();
                 _exitCode = 0;
             }
             catch (Exception exception)

@@ -46,6 +46,9 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         if (asset is null)
             throw new FileNotFoundException("Could not find the Linux x64 Debian package in the latest stable ClamAV release.");
 
+        string assetName = Path.GetFileName(asset);
+        string releaseTag = GetReleaseTag(assetName, ".linux.x86_64.deb");
+
         string extractDirectory = await _directoryUtil.CreateTempDirectory(cancellationToken).NoSync();
         await _processUtil.Start("dpkg-deb", extractDirectory,
             $"--extract {Quote(asset)} {Quote(extractDirectory)}", log: false, cancellationToken: cancellationToken).NoSync();
@@ -66,8 +69,11 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         await MaterializeSymbolicLinks(stageDirectory, cancellationToken).NoSync();
 
         await _fileUtil.Write(Path.Combine(stageDirectory, "SOURCE.txt"),
-            $"Official release package from https://github.com/{Owner}/{Repository}/releases/latest{Environment.NewLine}" +
-            $"Asset: {Path.GetFileName(asset)}{Environment.NewLine}" +
+            $"Upstream project: https://github.com/{Owner}/{Repository}{Environment.NewLine}" +
+            $"Release: https://github.com/{Owner}/{Repository}/releases/tag/{releaseTag}{Environment.NewLine}" +
+            $"Binary asset: {assetName}{Environment.NewLine}" +
+            $"Corresponding source: https://github.com/{Owner}/{Repository}/releases/download/{releaseTag}/{releaseTag}.tar.gz{Environment.NewLine}" +
+            $"License: GPL-2.0-only; see COPYING.txt and COPYING/ in this directory.{Environment.NewLine}" +
             $"Symbolic links are materialized for NuGet compatibility.{Environment.NewLine}",
             log: false, cancellationToken).NoSync();
 
@@ -112,6 +118,14 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
             await _fileUtil.Delete(path, ignoreMissing: false, log: false, cancellationToken).NoSync();
             await _fileUtil.Copy(targetFile.FullName, path, log: false, cancellationToken).NoSync();
         }
+    }
+
+    private static string GetReleaseTag(string assetName, string suffix)
+    {
+        if (!assetName.StartsWith("clamav-", StringComparison.Ordinal) || !assetName.EndsWith(suffix, StringComparison.Ordinal))
+            throw new InvalidDataException($"Could not determine the ClamAV release tag from asset '{assetName}'.");
+
+        return assetName[..^suffix.Length];
     }
 
     private static string Quote(string value) => $"\"{value.Replace("\"", "\\\"")}\"";

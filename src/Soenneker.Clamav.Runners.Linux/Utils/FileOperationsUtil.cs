@@ -62,7 +62,9 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         MaterializeSymbolicLinks(stageDirectory);
 
         await _fileUtil.Write(Path.Combine(stageDirectory, "SOURCE.txt"),
-            $"Official release package from https://github.com/{Owner}/{Repository}/releases/latest{Environment.NewLine}Asset: {Path.GetFileName(asset)}{Environment.NewLine}",
+            $"Official release package from https://github.com/{Owner}/{Repository}/releases/latest{Environment.NewLine}" +
+            $"Asset: {Path.GetFileName(asset)}{Environment.NewLine}" +
+            $"Symbolic links are materialized for NuGet compatibility.{Environment.NewLine}",
             log: false, cancellationToken);
 
         _logger.LogInformation("Prepared Linux x64 ClamAV runtime at {StageDirectory}", stageDirectory);

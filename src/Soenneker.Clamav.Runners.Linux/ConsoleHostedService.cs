@@ -37,6 +37,8 @@ public sealed class ConsoleHostedService : IHostedService
                 string stageDirectory = await _fileOperationsUtil.Process(cancellationToken).NoSync();
                 await _runnersManager.PushIfChangesNeededForDirectory(Path.Combine(Constants.RuntimeIdentifier, "clamav"), stageDirectory,
                     Constants.Library, $"https://github.com/soenneker/{Constants.Library}", false, cancellationToken).NoSync();
+                await _runnersManager.PushIfChangesNeededForDirectory(Path.Combine(Constants.RuntimeIdentifier, "freshclam"), stageDirectory,
+                    Constants.FreshclamLibrary, $"https://github.com/soenneker/{Constants.FreshclamLibrary}", false, cancellationToken).NoSync();
                 _exitCode = 0;
             }
             catch (Exception exception)
@@ -44,7 +46,7 @@ public sealed class ConsoleHostedService : IHostedService
                 if (Debugger.IsAttached)
                     Debugger.Break();
 
-                _logger.LogError(exception, "Could not update {Library}", Constants.Library);
+                _logger.LogError(exception, "Could not update the Linux ClamAV packages");
                 _exitCode = 1;
             }
             finally

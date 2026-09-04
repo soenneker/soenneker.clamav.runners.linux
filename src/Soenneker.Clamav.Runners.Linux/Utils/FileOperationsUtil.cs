@@ -15,6 +15,7 @@ using Soenneker.Utils.Process.Abstract;
 
 namespace Soenneker.Clamav.Runners.Linux.Utils;
 
+/// <inheritdoc cref="IFileOperationsUtil" />
 public sealed class FileOperationsUtil : IFileOperationsUtil
 {
     private const string Owner = "Cisco-Talos";

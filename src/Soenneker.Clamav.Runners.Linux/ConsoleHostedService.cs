@@ -36,10 +36,10 @@ public sealed class ConsoleHostedService : IHostedService
             {
                 string stageDirectory = await _fileOperationsUtil.Process(cancellationToken).NoSync();
                 await _runnersManager.PushIfChangesNeededForDirectory(Path.Combine(Constants.RuntimeIdentifier, "clamav"), stageDirectory,
-                    Constants.Library, $"https://github.com/soenneker/{Constants.Library}", false, cancellationToken, upstreamVersion: _fileOperationsUtil.Version).NoSync();
+                    Constants.Library, $"https://github.com/soenneker/{Constants.Library}", false, cancellationToken, updateDetails: _fileOperationsUtil.Version).NoSync();
                 await _fileOperationsUtil.PrepareFreshclamRuntime(stageDirectory, cancellationToken).NoSync();
                 await _runnersManager.PushIfChangesNeededForDirectory(Path.Combine(Constants.RuntimeIdentifier, "freshclam"), stageDirectory,
-                    Constants.FreshclamLibrary, $"https://github.com/soenneker/{Constants.FreshclamLibrary}", false, cancellationToken, upstreamVersion: _fileOperationsUtil.Version).NoSync();
+                    Constants.FreshclamLibrary, $"https://github.com/soenneker/{Constants.FreshclamLibrary}", false, cancellationToken, updateDetails: _fileOperationsUtil.Version).NoSync();
                 _exitCode = 0;
             }
             catch (Exception exception)

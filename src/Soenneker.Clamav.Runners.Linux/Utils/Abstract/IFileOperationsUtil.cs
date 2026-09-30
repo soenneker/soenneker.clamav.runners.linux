@@ -5,6 +5,9 @@ namespace Soenneker.Clamav.Runners.Linux.Utils.Abstract;
 
 public interface IFileOperationsUtil
 {
+    /// <summary>Gets the version of the prepared distribution.</summary>
+    string? Version { get; }
+
 
     /// <summary>
     /// Downloads and extracts the latest stable official ClamAV Linux x64 distribution.

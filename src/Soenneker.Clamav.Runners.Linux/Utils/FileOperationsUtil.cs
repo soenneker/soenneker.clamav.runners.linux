@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Net.Http;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -22,7 +22,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
     private const string Owner = "Cisco-Talos";
     private const string Repository = "clamav";
-    private static readonly string[] _assetPatterns = [".linux.x86_64.deb"];
+    private const string PackageSuffix = ".linux.x86_64.deb";
 
     private readonly ILogger<FileOperationsUtil> _logger;
     private readonly IDirectoryUtil _directoryUtil;
@@ -42,15 +42,28 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
     public async ValueTask<string> Process(CancellationToken cancellationToken = default)
     {
+        var releases = await _releasesUtil.GetAll(Owner, Repository, cancellationToken).NoSync();
+        var release = releases.Where(r => r.Draft != true && r.Prerelease != true)
+                              .OrderByDescending(r => r.CreatedAt)
+                              .FirstOrDefault();
+        string? releaseTag = release?.TagName;
+        if (releaseTag is null || !releaseTag.StartsWith("clamav-", StringComparison.Ordinal))
+            throw new InvalidDataException("Could not determine the latest stable ClamAV release tag.");
+
+        string assetName = releaseTag + PackageSuffix;
+        var package = release!.Assets?.FirstOrDefault(a => string.Equals(a.Name, assetName, StringComparison.Ordinal));
+        if (package?.BrowserDownloadUrl is null)
+            throw new FileNotFoundException($"Could not find '{assetName}' in the ClamAV release.");
+
         string downloadDirectory = await _directoryUtil.CreateTempDirectory(cancellationToken).NoSync();
-        string? asset = await _releasesUtil.DownloadReleaseAssetByNamePattern(Owner, Repository, downloadDirectory,
-            _assetPatterns, cancellationToken).NoSync();
-
-        if (asset is null)
-            throw new FileNotFoundException("Could not find the Linux x64 Debian package in the latest stable ClamAV release.");
-
-        string assetName = Path.GetFileName(asset);
-        string releaseTag = GetReleaseTag(assetName, ".linux.x86_64.deb");
+        string asset = Path.Combine(downloadDirectory, "clamav.deb");
+        _logger.LogInformation("Downloading ClamAV package {AssetName}", assetName);
+        using (var client = new HttpClient())
+        await using (Stream source = await client.GetStreamAsync(package.BrowserDownloadUrl, cancellationToken).NoSync())
+        await using (FileStream destination = File.Create(asset))
+        {
+            await source.CopyToAsync(destination, cancellationToken).NoSync();
+        }
 
         string extractDirectory = await _directoryUtil.CreateTempDirectory(cancellationToken).NoSync();
         await _processUtil.Start("dpkg-deb", extractDirectory,
@@ -137,14 +150,6 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
             await _fileUtil.Delete(path, ignoreMissing: false, log: false, cancellationToken).NoSync();
             await _fileUtil.Copy(targetFile.FullName, path, log: false, cancellationToken).NoSync();
         }
-    }
-
-    private static string GetReleaseTag(string assetName, string suffix)
-    {
-        if (!assetName.StartsWith("clamav-", StringComparison.Ordinal) || !assetName.EndsWith(suffix, StringComparison.Ordinal))
-            throw new InvalidDataException($"Could not determine the ClamAV release tag from asset '{assetName}'.");
-
-        return assetName[..^suffix.Length];
     }
 
     private static string Quote(string value) => $"\"{value.Replace("\"", "\\\"")}\"";
